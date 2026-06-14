@@ -1,0 +1,16 @@
+# Ruff configuration for the Micro-Drama-Generator (Python server).
+#
+# Checked in so `ruff check` is reproducible. The codebase intentionally
+# uses a few cosmetic patterns the team treats as acceptable; those rules
+# are ignored so lint surfaces real problems (unused imports/vars,
+# undefined names, import ordering) without mass churn.
+
+# Lint rule selection: pycodestyle errors (E), Pyflakes (F), isort (I).
+[lint]
+select = ["E", "F", "I"]
+
+# Ignored cosmetic rules (intentional in this codebase):
+#   E402 - module-level import not at top of file (late imports after load_dotenv)
+#   E702 - multiple statements on one line (semicolons)
+#   E741 - ambiguous variable name (short loop vars)
+ignore = ["E402", "E702", "E741"]
