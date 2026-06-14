@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import uuid
 from pathlib import Path
 from typing import Any, Dict
@@ -11,7 +10,7 @@ load_dotenv()
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -96,14 +95,14 @@ async def run_pipeline(job_id: str, req: GenerateRequest) -> None:
     try:
         if req.mode == "script2video":
             # Script2Video: user provides a single scene script
-            pipeline = Script2VideoPipeline()
+            script_pipeline = Script2VideoPipeline()
             character_extractor = CharacterExtractor()
 
             await progress_callback("characters", "Extracting characters...", 10)
             characters = await character_extractor.extract_characters(req.script or req.idea)
 
             output_dir = str(OUTPUTS_DIR / job_id / "scene_00")
-            video_path = await pipeline.run(
+            video_path = await script_pipeline.run(
                 script=req.script or req.idea,
                 characters=characters,
                 user_requirement=req.user_requirement,
@@ -116,8 +115,8 @@ async def run_pipeline(job_id: str, req: GenerateRequest) -> None:
             )
         else:
             # Idea2Video: full agentic pipeline
-            pipeline = Idea2VideoPipeline()
-            video_path = await pipeline.run(
+            idea_pipeline = Idea2VideoPipeline()
+            video_path = await idea_pipeline.run(
                 idea=req.idea,
                 user_requirement=req.user_requirement,
                 style=req.style,
