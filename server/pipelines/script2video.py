@@ -55,7 +55,7 @@ class Script2VideoPipeline:
             }
             results = await asyncio.gather(*portrait_tasks.values(), return_exceptions=True)
             for name, result in zip(portrait_tasks.keys(), results):
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     # Non-fatal: continue without portrait
                     print(f"Warning: portrait generation failed for {name}: {result}")
                 else:
@@ -101,9 +101,9 @@ class Script2VideoPipeline:
         ]
         video_results = await asyncio.gather(*video_tasks, return_exceptions=True)
 
-        shot_video_paths = []
+        shot_video_paths: List[str] = []
         for i, result in enumerate(video_results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 print(f"Warning: video generation failed for shot {i}: {result}")
             else:
                 shot_video_paths.append(result)
