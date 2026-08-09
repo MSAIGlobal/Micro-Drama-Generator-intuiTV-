@@ -1,0 +1,29 @@
+# gitleaks configuration - Cyber Essentials secret hygiene.
+# Extends the upstream default ruleset. The BLOCKING CI gate scans only the
+# commits a push / pull request introduces (see security-scan.yml); a separate
+# weekly job audits the whole tree (advisory). Historical secrets are handled by
+# docs/security/secret-remediation-runbook.md, not by blocking pull requests.
+title = "MSAI gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Doc placeholders, test/training/red-team fixtures, and known pending secret files"
+regexTarget = "match"
+regexes = [
+  '''(?i)(your[_-]?(msai[_-]?)?(api[_-]?)?(key|token|secret))''',
+  '''(?i)(example|placeholder|dummy|sample|changeme|redacted|fake[_-]?|test[_-]?(secret|key|token))''',
+  '''(?i)bearer\s+your[_-]''',
+  '''(?i)<[a-z0-9_.-]+>''',
+  '''(?i)(xxx+|\*\*\*+)''',
+]
+paths = [
+  # MSAI's security platform legitimately embeds example secrets in these:
+  '''.*\.(test|spec)\.(ts|tsx|js|jsx|py)$''',
+  '''(^|/)(tests?|__tests__|fixtures?|testdata|test_data)/''',
+  '''(^|/)(redteam|red_team|harness)/''',
+  '''(^|/)training/''',
+  '''(^|/)docs/security/''',
+  '''.*\.(example|sample|template)$''',
+]

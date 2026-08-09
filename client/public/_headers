@@ -1,0 +1,12 @@
+# Cyber Essentials / Secure Configuration — baseline HTTP security headers.
+# Applied by Netlify / Cloudflare Pages from the publish directory.
+# Add a tuned Content-Security-Policy per app (Report-Only first). See
+# docs/security/cyber-essentials.md.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Cross-Origin-Opener-Policy: same-origin
+  Permissions-Policy: interest-cohort=(), browsing-topics=()
+  X-XSS-Protection: 0
