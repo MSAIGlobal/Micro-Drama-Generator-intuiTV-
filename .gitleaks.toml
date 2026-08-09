@@ -1,0 +1,7 @@
+# gitleaks configuration — Cyber Essentials secret hygiene.
+# Extends the upstream default ruleset; add project-specific allowlist
+# entries ONLY for verified false positives, with a comment explaining why.
+title = "MSAI gitleaks config"
+
+[extend]
+useDefault = true

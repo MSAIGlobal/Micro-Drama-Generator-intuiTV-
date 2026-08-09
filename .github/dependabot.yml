@@ -1,0 +1,37 @@
+# Cyber Essentials: Security Update Management (automated dependency updates).
+# Managed centrally under MSAI-ENG-AIACT / cyber-essentials-compliance.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["security", "dependencies"]
+    groups:
+      actions-security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: "npm"
+    directory: "/client"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["security", "dependencies"]
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: "pip"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["security", "dependencies"]
+    groups:
+      pip-security:
+        applies-to: security-updates
+        patterns: ["*"]
