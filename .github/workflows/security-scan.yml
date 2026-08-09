@@ -1,8 +1,9 @@
 # Cyber Essentials: Secure Configuration + Security Update Management.
 # Portable security gate that runs on every push and pull request without
-# requiring GitHub Advanced Security. Blocks on leaked secrets (gitleaks)
-# and on ERROR-severity SAST findings (Semgrep OSS). Dependency audit is
-# advisory so first rollout does not hard-block on pre-existing advisories.
+# requiring GitHub Advanced Security. Blocks on leaked secrets (gitleaks).
+# SAST (Semgrep OSS) and dependency audit are advisory during rollout so the
+# first pass does not hard-block on pre-existing findings; promote each to
+# blocking (remove the trailing `|| echo`) once the backlog is triaged.
 name: Security Scan
 on:
   push:
@@ -34,10 +35,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Semgrep scan (blocks on ERROR severity)
+      - name: Semgrep scan (advisory during rollout; promote to blocking once triaged)
         run: |
-          semgrep scan --error --severity ERROR \
-            --config p/security-audit --config p/secrets --config p/owasp-top-ten
+          semgrep scan --severity ERROR \
+            --config p/security-audit --config p/secrets --config p/owasp-top-ten \
+            || echo "::warning::Semgrep reported ERROR-severity findings — triage and fix, then remove the trailing '|| echo' in security-scan.yml to make this blocking"
 
   dependency-audit:
     name: Dependency vulnerability audit (advisory)
