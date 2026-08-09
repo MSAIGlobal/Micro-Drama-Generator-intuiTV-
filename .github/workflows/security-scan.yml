@@ -1,34 +1,68 @@
 # Cyber Essentials: Secure Configuration + Security Update Management.
-# Portable security gate that runs on every push and pull request without
-# requiring GitHub Advanced Security. Blocks on leaked secrets (gitleaks).
-# SAST (Semgrep OSS) and dependency audit are advisory during rollout so the
-# first pass does not hard-block on pre-existing findings; promote each to
-# blocking (remove the trailing `|| echo`) once the backlog is triaged.
+# Portable security gate (no GitHub Advanced Security required).
+#  - secret-scan: BLOCKS on secrets introduced by the push / pull request diff.
+#  - secret-audit-full: weekly ADVISORY full-tree scan for visibility.
+#  - sast (Semgrep) + dependency-audit: advisory during rollout.
 name: Security Scan
 on:
   push:
     branches: [main, master, "claude/**"]
   pull_request: {}
+  schedule:
+    - cron: "17 4 * * 1"
   workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
   secret-scan:
-    name: Secret scan (gitleaks)
+    name: Secret scan (gitleaks, diff)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Run gitleaks
+      - name: Scan introduced commits for secrets (blocking)
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZERO=0000000000000000000000000000000000000000
+          if [ "$EVENT" = "pull_request" ]; then
+            RANGE="$BASE..$HEAD"
+          elif [ -n "${BEFORE:-}" ] && [ "$BEFORE" != "$ZERO" ]; then
+            RANGE="$BEFORE..$AFTER"
+          else
+            RANGE="$AFTER~1..$AFTER"
+          fi
+          echo "Scanning commit range: $RANGE"
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            detect --source /repo --redact --no-banner --verbose \
+            --config /repo/.gitleaks.toml --log-opts="$RANGE"
+
+  secret-audit-full:
+    name: Secret audit (full tree, advisory)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Full-tree gitleaks (advisory)
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:latest \
             detect --source /repo --no-git --redact --no-banner --verbose \
-            --config /repo/.gitleaks.toml
+            --config /repo/.gitleaks.toml \
+            || echo "::warning::Full-tree gitleaks reported findings (advisory) - review and remediate"
 
   sast:
     name: Static analysis (Semgrep OSS)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     container:
       image: semgrep/semgrep:latest
@@ -39,7 +73,7 @@ jobs:
         run: |
           semgrep scan --severity ERROR \
             --config p/security-audit --config p/secrets --config p/owasp-top-ten \
-            || echo "::warning::Semgrep reported ERROR-severity findings — triage and fix, then remove the trailing '|| echo' in security-scan.yml to make this blocking"
+            || echo "::warning::Semgrep reported ERROR-severity findings - triage and fix, then remove the trailing '|| echo' in security-scan.yml to make this blocking"
 
   dependency-audit:
     name: Dependency vulnerability audit (advisory)
@@ -61,9 +95,9 @@ jobs:
         if: ${{ hashFiles('**/package-lock.json', '**/npm-shrinkwrap.json', '**/yarn.lock', '**/pnpm-lock.yaml') != '' }}
         shell: bash
         run: |
-          npm audit --audit-level=critical || echo "::warning::npm audit reported advisories (advisory, non-blocking)"
+          npm audit --audit-level=critical || echo "::warning::npm audit reported advisories (advisory)"
       - name: Python dependency audit (advisory)
         shell: bash
         run: |
           python -m pip install --quiet pip-audit || true
-          pip-audit || echo "::warning::pip-audit reported advisories (advisory, non-blocking)"
+          pip-audit || echo "::warning::pip-audit reported advisories (advisory)"
