@@ -1,18 +1,20 @@
 import asyncio
+import hmac
 import json
+import os
 import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pipelines.idea2video import Idea2VideoPipeline
 from pipelines.script2video import Script2VideoPipeline
@@ -24,13 +26,29 @@ from agents.character_extractor import CharacterExtractor
 # ---------------------------------------------------------------------------
 app = FastAPI(title="MicroDrama AI API", version="1.0.0")
 
+# CORS: explicit allow-list from env (comma-separated). No wildcard — a "*"
+# origin with credentials is invalid and unsafe. Empty = no cross-origin access.
+ALLOWED_ORIGINS = [
+    o.strip() for o in os.environ.get("MICRODRAMA_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+# Optional bearer token: when MICRODRAMA_API_TOKEN is set, the job endpoints
+# require it (constant-time check); left unset the API stays open for local dev.
+API_TOKEN = os.environ.get("MICRODRAMA_API_TOKEN", "")
+
+
+def require_auth(authorization: Optional[str] = Header(None)) -> None:
+    if not API_TOKEN:
+        return
+    if not authorization or not hmac.compare_digest(authorization, f"Bearer {API_TOKEN}"):
+        raise HTTPException(status_code=401, detail="unauthorized")
 
 # Ensure outputs directory exists on startup
 OUTPUTS_DIR = Path("outputs")
@@ -57,11 +75,12 @@ jobs: Dict[str, Dict[str, Any]] = {}
 # Request / Response schemas
 # ---------------------------------------------------------------------------
 class GenerateRequest(BaseModel):
-    idea: str
-    user_requirement: str = ""
-    style: str = "Cinematic"
-    mode: str = "idea2video"  # "idea2video" or "script2video"
-    script: str = ""          # used when mode == "script2video"
+    # Bounded lengths guard against cost/DoS via oversized LLM/video inputs.
+    idea: str = Field(..., max_length=4000)
+    user_requirement: str = Field("", max_length=4000)
+    style: str = Field("Cinematic", max_length=64)
+    mode: str = Field("idea2video", max_length=32)  # "idea2video" or "script2video"
+    script: str = Field("", max_length=20000)       # used when mode == "script2video"
 
 
 class GenerateResponse(BaseModel):
@@ -166,7 +185,12 @@ async def health():
 
 
 @app.post("/api/generate", response_model=GenerateResponse)
-async def generate(req: GenerateRequest, background_tasks: BackgroundTasks):
+async def generate(
+    req: GenerateRequest,
+    background_tasks: BackgroundTasks,
+    authorization: Optional[str] = Header(None),
+):
+    require_auth(authorization)
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
         "status": "running",
@@ -237,4 +261,8 @@ async def get_result(job_id: str):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+    # reload defaults OFF (production-safe); enable locally with MICRODRAMA_RELOAD=1.
+    reload = os.environ.get("MICRODRAMA_RELOAD", "0") == "1"
+    host = os.environ.get("MICRODRAMA_HOST", "127.0.0.1")
+    port = int(os.environ.get("MICRODRAMA_PORT", "8000"))
+    uvicorn.run("api:app", host=host, port=port, reload=reload)
